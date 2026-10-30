@@ -48,22 +48,24 @@ These are documented in the sprint acceptance report and validation evidence, an
 To run the SQL checks, you need:
 
 - Docker Engine/Desktop with Docker Compose v2.
-- A free local TCP port `5432`.
+- A free local TCP port `5433` (the container continues to use port `5432`).
 - A local `.env` file in the repository root with `POSTGRES_PASSWORD` set.
+
+The repository-root `.env` is the single active configuration file for both
+Compose and the Python scripts. Do not create a second `.env` in a subfolder.
 
 Create or update the root `.env` with these local values (do not overwrite an
 existing file or credentials):
 
 ```dotenv
 POSTGRES_PASSWORD=your-unique-local-password
-DATABASE_URL=postgresql://freightiq:URL-ENCODED-PASSWORD@localhost:5432/freightiq
+DATABASE_URL=postgresql://freightiq:URL-ENCODED-PASSWORD@localhost:5433/freightiq
 ```
 
 Replace the example password in both values, URL-encoding special characters
 in `DATABASE_URL`. The Compose file sets the database name and user to
-`freightiq`. Keep credentials private; do not commit or share the populated
-`.env`. The placeholder template is
-[08_Code_and_Handover/.env.example](./08_Code_and_Handover/.env.example).
+`freightiq`. Keep credentials private; `.env*` files are ignored by Git.
+Create the root `.env` locally if it does not exist.
 
 From the repository root, start the database and wait until it is healthy:
 

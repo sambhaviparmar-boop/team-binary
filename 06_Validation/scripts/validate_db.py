@@ -1,96 +1,57 @@
 ﻿
+import sys
+from pathlib import Path
+
 import psycopg
-from db_config import get_database_url
+
+sys.path.insert(
+    0,
+    str(Path(__file__).resolve().parents[2] / "08_Code_and_Handover" / "scripts"),
+)
+from db_config import get_database_url  # type: ignore[reportMissingImports]
 
 DB_URL = get_database_url()
 
 SOURCE_NAME = "BDI BCI BPI weekly historical indices - community dataset"
 
 checks = [
-    (
-        "freight_row_count",
-        "SELECT count(*) FROM freight_observations",
-    ),
-    (
-        "duplicate_date_record_ids",
-        """
-        SELECT count(*)
-        FROM (
-            SELECT assessment_date, record_id
-            FROM freight_observations
-            GROUP BY assessment_date, record_id
-            HAVING count(*) > 1
+    ("freight_row_count", "SELECT count(*) FROM freight_observations"),
+    ("duplicate_date_record_ids", """
+        SELECT count(*) FROM (
+            SELECT assessment_date, record_id FROM freight_observations
+            GROUP BY assessment_date, record_id HAVING count(*) > 1
         ) x
-        """,
-    ),
-    (
-        "nonpositive_rates",
-        """
-        SELECT count(*)
-        FROM freight_observations
-        WHERE freight_rate_usd_per_tonne <= 0
-           OR freight_rate_usd_per_tonne IS NULL
-        """,
-    ),
-    (
-        "rows_missing_port_names",
-        """
-        SELECT count(*)
-        FROM freight_observations
-        WHERE origin_port IS NULL
-           OR destination_port IS NULL
-           OR btrim(origin_port) = ''
-           OR btrim(destination_port) = ''
-        """,
-    ),
-    (
-        "required_destination_ports_present",
-        """
-        SELECT count(DISTINCT destination_port)
-        FROM freight_observations
-        WHERE destination_port IN (
-            'Paradip',
-            'Visakhapatnam',
-            'Haldia'
-        )
-        """,
-    ),
-    (
-        "candidate_lanes_count",
-        "SELECT count(*) FROM trade_lanes",
-    ),
-    (
-        "community_derived_index_rows",
-        """
-        SELECT count(*)
-        FROM market_observations mo
+    """),
+    ("nonpositive_rates", """
+        SELECT count(*) FROM freight_observations
+        WHERE freight_rate_usd_per_tonne <= 0 OR freight_rate_usd_per_tonne IS NULL
+    """),
+    ("rows_missing_port_names", """
+        SELECT count(*) FROM freight_observations
+        WHERE origin_port IS NULL OR destination_port IS NULL
+           OR btrim(origin_port) = '' OR btrim(destination_port) = ''
+    """),
+    ("required_destination_ports_present", """
+        SELECT count(DISTINCT destination_port) FROM freight_observations
+        WHERE destination_port IN ('Paradip', 'Visakhapatnam', 'Haldia')
+    """),
+    ("candidate_lanes_count", "SELECT count(*) FROM trade_lanes"),
+    ("community_derived_index_rows", """
+        SELECT count(*) FROM market_observations mo
         JOIN data_sources ds ON ds.source_id = mo.source_id
-        WHERE ds.source_name = %s
-          AND mo.indicator_code IN ('BDI', 'BCI', 'BPI')
+        WHERE ds.source_name = %s AND mo.indicator_code IN ('BDI', 'BCI', 'BPI')
           AND mo.data_type = 'derived'
-        """,
-    ),
-    (
-        "community_derived_index_nonpositive_values",
-        """
-        SELECT count(*)
-        FROM market_observations mo
+    """),
+    ("community_derived_index_nonpositive_values", """
+        SELECT count(*) FROM market_observations mo
         JOIN data_sources ds ON ds.source_id = mo.source_id
-        WHERE ds.source_name = %s
-          AND mo.indicator_code IN ('BDI', 'BCI', 'BPI')
-          AND mo.data_type = 'derived'
-          AND mo.value <= 0
-        """,
-    ),
-    (
-        "approved_observed_index_rows",
-        """
-        SELECT count(*)
-        FROM market_observations
-        WHERE indicator_code IN ('BDI', 'BCI', 'BPI')
-          AND data_type = 'observed'
-        """,
-    ),
+        WHERE ds.source_name = %s AND mo.indicator_code IN ('BDI', 'BCI', 'BPI')
+          AND mo.data_type = 'derived' AND mo.value <= 0
+    """),
+    ("approved_observed_index_rows", """
+        SELECT count(*) FROM market_observations
+        WHERE indicator_code IN ('BDI', 'BCI', 'BPI') AND data_type = 'observed'
+    """),
 ]
 
 expected_values = {
@@ -109,34 +70,32 @@ expected_values = {
 
 
 
+# Classify each database check using its established expected values.
 def get_status(name, value):
-    if name in (
+    zero_checks = {
         "duplicate_date_record_ids",
         "nonpositive_rates",
         "rows_missing_port_names",
         "community_derived_index_nonpositive_values",
-    ):
+    }
+    if name in zero_checks:
         return "passed" if value == 0 else "failed"
 
-    if name == "freight_row_count":
-        return "passed" if value == 14608 else "warning"
-
-    if name == "required_destination_ports_present":
-        return "passed" if value == 3 else "failed"
-
-    if name == "candidate_lanes_count":
-        return "passed" if value == 10 else "warning"
-
-    if name == "community_derived_index_rows":
-        return "passed" if value == 771 else "warning"
-
+    expected = {
+        "freight_row_count": (14608, "warning"),
+        "required_destination_ports_present": (3, "failed"),
+        "candidate_lanes_count": (10, "warning"),
+        "community_derived_index_rows": (771, "warning"),
+    }
     if name == "approved_observed_index_rows":
         return "blocked" if value == 0 else "warning"
-
+    if name in expected:
+        target, mismatch = expected[name]
+        return "passed" if value == target else mismatch
     return "warning"
 
 
-
+# Explain provenance limitations for checks that need evidence context.
 def get_evidence(name, value):
     if name.startswith("community_derived_index_"):
         return (
@@ -158,6 +117,7 @@ def get_evidence(name, value):
     return None
 
 
+# Run all database checks, save results, and print coverage summaries.
 def main():
     validation_results = []
 

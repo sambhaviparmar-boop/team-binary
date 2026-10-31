@@ -1,37 +1,33 @@
-
 from pathlib import Path
+
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "03_Processed_Data" / "weekly_indices_2021_2025.csv"
-
 FILES = {
     "BDI": ROOT / "data" / "indices" / "bdiy_historical.csv",
     "BCI": ROOT / "data" / "indices" / "cape_historical.csv",
     "BPI": ROOT / "data" / "indices" / "panama_historical.csv",
 }
+SOURCE_URL = "https://github.com/yieldchaser/Shipping/tree/main/data/indices"
+START, END = pd.Timestamp("2021-01-01"), pd.Timestamp("2025-12-31")
+REQUIRED_COLUMNS = {
+    "date", "index_code", "value", "unit", "source", "source_url",
+    "source_type", "verification_status", "aggregation_method",
+}
+OUTPUT_COLUMNS = [
+    "date", "index_code", "value", "unit", "source", "source_url",
+    "source_type", "verification_status", "aggregation_method",
+]
 
-SOURCE_URL = (
-    "https://github.com/yieldchaser/Shipping/tree/main/data/indices"
-)
 
-START = pd.Timestamp("2021-01-01")
-END = pd.Timestamp("2025-12-31")
-
-frames = []
-
-available_files = {code: path for code, path in FILES.items() if path.is_file()}
-
-if set(available_files) != set(FILES) and OUT.is_file():
+# Validate and summarize the existing weekly file when daily inputs are missing.
+def validate_existing_weekly():
     existing = pd.read_csv(OUT)
-    required = {
-        "date", "index_code", "value", "unit", "source", "source_url",
-        "source_type", "verification_status", "aggregation_method",
-    }
-    if not required.issubset(existing.columns):
+    missing = REQUIRED_COLUMNS - set(existing.columns)
+    if missing:
         raise SystemExit(
-            f"Existing weekly index file is missing required columns: "
-            f"{sorted(required - set(existing.columns))}"
+            f"Existing weekly index file is missing required columns: {sorted(missing)}"
         )
     existing["date"] = pd.to_datetime(existing["date"], errors="coerce")
     existing["value"] = pd.to_numeric(existing["value"], errors="coerce")
@@ -49,44 +45,27 @@ if set(available_files) != set(FILES) and OUT.is_file():
     print(existing.groupby("index_code").size().to_string())
     print("\nDate coverage:")
     print(existing.groupby("index_code")["date"].agg(["min", "max"]).to_string())
-    raise SystemExit(0)
-elif set(available_files) != set(FILES):
-    missing = sorted(set(FILES) - set(available_files))
-    raise SystemExit(
-        "Cannot rebuild weekly indices; missing daily source files for "
-        f"{', '.join(missing)}. Existing weekly file: {OUT}"
-    )
 
-for code, path in available_files.items():
-    df = pd.read_csv(path)
 
-    dates = pd.to_datetime(df["Date"], errors="coerce")
+# Validate daily records and select the final source value of each Friday week.
+def build_weekly_frame(code, path):
+    frame = pd.read_csv(path)
+    dates = pd.to_datetime(frame["Date"], errors="coerce")
     values = pd.to_numeric(
-        df["Index"].astype(str).str.replace(",", "", regex=False),
+        frame["Index"].astype(str).str.replace(",", "", regex=False),
         errors="coerce",
     )
-
-    data = pd.DataFrame({"date": dates, "value": values})
-    data = data.dropna()
-    data = data[data["date"].between(START, END)]
-    data = data.sort_values("date")
-
+    data = pd.DataFrame({"date": dates, "value": values}).dropna()
+    data = data[data["date"].between(START, END)].sort_values("date")
     if data["date"].duplicated().any():
         raise ValueError(f"{code}: duplicate dates found; export stopped")
-
     if (data["value"] <= 0).any():
         raise ValueError(f"{code}: non-positive index values; export stopped")
 
-    # Last available source observation in each Friday-ending week.
     weekly = (
-        data.set_index("date")["value"]
-        .resample("W-FRI")
-        .last()
-        .dropna()
-        .rename("value")
-        .reset_index()
+        data.set_index("date")["value"].resample("W-FRI").last().dropna()
+        .rename("value").reset_index()
     )
-
     weekly["index_code"] = code
     weekly["unit"] = "index_points"
     weekly["source"] = "yieldchaser/Shipping GitHub"
@@ -94,33 +73,37 @@ for code, path in available_files.items():
     weekly["source_type"] = "community_maintained"
     weekly["verification_status"] = "unverified"
     weekly["aggregation_method"] = "last_available_observation_W-FRI"
+    return weekly
 
-    frames.append(weekly)
 
-result = pd.concat(frames, ignore_index=True)
+# Rebuild the packaged weekly index CSV, or validate its existing fallback.
+def main():
+    available = {code: path for code, path in FILES.items() if path.is_file()}
+    if len(available) != len(FILES):
+        if OUT.is_file():
+            validate_existing_weekly()
+            return
+        missing = sorted(set(FILES) - set(available))
+        raise SystemExit(
+            "Cannot rebuild weekly indices; missing daily source files for "
+            f"{', '.join(missing)}. Existing weekly file: {OUT}"
+        )
 
-result = result[
-    [
-        "date",
-        "index_code",
-        "value",
-        "unit",
-        "source",
-        "source_url",
-        "source_type",
-        "verification_status",
-        "aggregation_method",
-    ]
-].sort_values(["date", "index_code"])
+    result = pd.concat(
+        [build_weekly_frame(code, path) for code, path in available.items()],
+        ignore_index=True,
+    )[OUTPUT_COLUMNS].sort_values(["date", "index_code"])
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(OUT, index=False, date_format="%Y-%m-%d")
+    print("Export complete:", OUT)
+    print("Total rows:", len(result))
+    print("\nRows per index:")
+    print(result.groupby("index_code").size().to_string())
+    print("\nDate coverage:")
+    print(result.groupby("index_code")["date"].agg(["min", "max"]).to_string())
+    print("\nFirst 5 rows:")
+    print(result.head().to_string(index=False))
 
-OUT.parent.mkdir(parents=True, exist_ok=True)
-result.to_csv(OUT, index=False, date_format="%Y-%m-%d")
 
-print("Export complete:", OUT)
-print("Total rows:", len(result))
-print("\nRows per index:")
-print(result.groupby("index_code").size().to_string())
-print("\nDate coverage:")
-print(result.groupby("index_code")["date"].agg(["min", "max"]).to_string())
-print("\nFirst 5 rows:")
-print(result.head().to_string(index=False))
+if __name__ == "__main__":
+    main()

@@ -166,7 +166,7 @@ The requested remaining coal-import integration work is complete for the availab
 
 ## Team handoff and repository preparation
 - The local database is not part of Git; teammates initialize a local TimescaleDB volume and repopulate it from the tracked SQL and datasets.
-- `.env.example` contains placeholders only. `.env`, Python environments, caches, logs, database dumps, and local database files are excluded by `.gitignore`.
+- The local `.env` is ignored by Git. Python environments, caches, logs, database dumps, and local database files are also excluded by `.gitignore`.
 - Database scripts now require `DATABASE_URL` from `.env` or the process environment; no connection password is embedded in the scripts or Compose configuration.
 - The Brent importer uses a dynamic source ID and idempotent conflict handling. Its provenance note explicitly states that observations are loaded from the bundled CSV mirror and were not fetched directly from the EIA API.
 - The GitHub target was found to contain an existing `main` commit with a `LICENSE` file. That history and file must be preserved during integration; no force-push is appropriate.

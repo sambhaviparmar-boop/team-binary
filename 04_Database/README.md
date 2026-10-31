@@ -141,8 +141,9 @@ submission.
    database volume. Do not run `docker compose down -v`, delete a volume, drop
    tables, or replay schema into an existing installation without a reviewed
    migration plan.
-2. From the project root, copy `.env.example` to `.env` and set unique local
-   placeholders/secrets privately. Never include `.env` in a submission.
+2. From the project root, create `.env` using the settings documented in the
+   root `README.md`. Keep credentials private; `.env*` files are ignored by
+   Git.
 3. Install Docker Compose v2 and the Python dependencies as described in
    [handover setup](../08_Code_and_Handover/README.md).
 4. Run `docker compose up -d` and wait for the service health check. Compose

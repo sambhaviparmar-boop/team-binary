@@ -9,9 +9,9 @@
   package folders.
 - Processed CSV copies are in `03_Processed_Data/`; raw datasets remain at the
   repository `data/` paths listed in the source inventory.
-- [`.env.example`](.env.example) is a placeholder-only template. The actual
-  local `.env`, passwords, and database connection string are intentionally
-  excluded.
+- The local configuration is kept only in the repository-root `.env`;
+  passwords and the database connection string are intentionally excluded
+  from this handover package. Git ignores `.env*` files.
 
 Package code files are archival copies of repository files. For routine work,
 run the originals from the project root and review changes against the
@@ -20,11 +20,10 @@ repository version before using a packaged copy.
 ## Prerequisites and setup
 
 1. Windows PowerShell, Docker Desktop with Compose v2, and Python 3.10+.
-2. From the project root, configure the local environment:
+2. From the project root, create and configure the single local environment
+   file using the settings documented in the root `README.md`:
 
    ```powershell
-   Copy-Item .env.example .env
-   # Edit .env locally; use a unique local password and matching URL.
    py -3 -m venv .venv
    .\.venv\Scripts\Activate.ps1
    python -m pip install -r requirements.txt
@@ -81,13 +80,14 @@ commands read-only.
 
 ## Environment template
 
-See [`.env.example`](.env.example). Replace placeholders locally; do not
-commit or submit the populated `.env`.
+Create the repository-root `.env` using the settings documented in the root
+`README.md`. Replace sample values locally; do not commit or submit the
+populated `.env`.
 
 ## Troubleshooting
 
-- **`DATABASE_URL is not set`:** configure local `.env` from the placeholder
-  template or set the variable in the current PowerShell session.
+- **`DATABASE_URL is not set`:** configure the repository-root `.env` or set
+  the variable in the current PowerShell session.
 - **Compose reports schema/table issues:** confirm whether the volume already
   existed. Compose init scripts are run for an empty database directory only;
   review migrations rather than deleting the volume.
